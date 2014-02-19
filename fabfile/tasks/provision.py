@@ -948,65 +948,45 @@ def run_setup_demo():
 #end run_setup_demo
 
 @task
-def setup_interface(intf_type = 'both'):
+@EXECUTE_TASK
+def setup_interface(*iftypes):
+    ''' Generate ifcfg file and bond interfaces for the interfaces defined in
+        data, control and bond variables specified in testbed and restart network.
     '''
-    Configure the IP address and netmask for non-mgmt interface based on parameter passed in non_mgmt stanza of testbed file. Also generate ifcfg file for the interface if the file is not present. 
-    '''
+    # Default iftypes
+    if len(iftypes) == 0:
+        iftypes = ('control', 'data')
 
-    if intf_type == 'both':
-        intf_type_list = ['control', 'data']
-    else:
-        intf_type_list = intf_type
+    # Create command and execute at node
+    cmd = 'python setup-vnc-interfaces.py'
+    bondinfo = getattr(testbed, 'bond', None)
+    for iftype in iftypes:
+        # Skip if iftype is not defined in testbed
+        hosts = getattr(testbed, iftype, None)
+        if hosts is None:
+            print 'WARNING: (%s) is not defined in testbed, Skipping...' %iftype
+            continue
 
-    for intf_type in intf_type_list:
-        tgt_ip = None
-        tgt_gw= None
-        setup_info={}
-        if intf_type == 'control' :
-            setup_info = getattr(testbed, 'control', None)
-        else :
-            setup_info = getattr(testbed, 'data', None)
-        if setup_info:
-            for host_str in setup_info.keys():
-               isBond=0
-               if 'device' in setup_info[host_str].keys(): 
-                   tgt_device = setup_info[host_str]['device']
-                   tgt_ip = str(IPNetwork(setup_info[host_str]['ip']).ip)
-                   tgt_netmask = str(IPNetwork(setup_info[host_str]['ip']).netmask)
-                   tgt_gw = setup_info[host_str]['gw']
-                   with settings(host_string = host_str):
-                       with settings(warn_only = True):
-                           count1=run("ifconfig -a | grep -c %s" %(tgt_device))
-                       # Even if intreface is not present, check if intreface is bond
-                       if 'bond' in tgt_device:
-                           isBond=1
-                           count1=1
-                       if int(count1):
-                           if not isBond:
-                               with settings(warn_only = True):
-                                   count2=run("ifconfig %s | grep -c %s" %(tgt_device,tgt_ip))
-                           else:
-                               count2=0
-                           if not int(count2):
-                               if not isBond:
-                                   # Device is present and IP is not present. Creating the required ifcfg file
-                                   hwaddr = run("ifconfig %s | grep -o -E '([[:xdigit:]]{1,2}:){5}[[:xdigit:]]{1,2}'" %(tgt_device))
-                               filename = '/etc/sysconfig/network-scripts/' +  'ifcfg-' + tgt_device
-                               bkp_file_name= '/etc/contrail/' +  'bkp_ifcfg-' + tgt_device
-                               if 'bond' in tgt_device:
-                                   create_bond(tgt_host=host_str,bond_ip=setup_info[host_str]['ip'])
-                               else:
-                                   with settings(warn_only = True):
-                                       run("cp %s  %s" %(filename,bkp_file_name))
-                                   run("rm -rf %s" %(filename))
-                                   run("echo DEVICE=%s >> %s" %(tgt_device,filename))
-                                   run("echo ONBOOT=yes >> %s" %(filename))
-                                   run("echo NM_CONTROLLED=no >>  %s" %(filename))
-                                   run("echo BOOTPROTO=none >>  %s" %(filename))
-                                   run("echo NETMASK=%s >>  %s" %(tgt_netmask,filename))
-                                   run("echo IPADDR=%s >>  %s" %(tgt_ip,filename))
-                                   run("echo HWADDR=%s >>  %s" %(hwaddr,filename))
-                               restart_network_service(host_str)
+        for host_str in hosts.keys():
+            hostinfo = hosts[host_str]
+            cmd += ' --device {device} --ip {ip}'.format(**hostinfo)
+            errmsg = 'For Type ({TYPE}), Host ({HOST}) is defined with device ({DEVICE}) but\
+                      its bond info is not available'
+            if re.match(r'^bond', hostinfo['device']):
+                if not bondinfo or not bondinfo.has_key(host_str):
+                    raise AttributeError(errmsg.format(TYPE=iftype, \
+                                                       HOST=host_str, \
+                                                       DEVICE=hostinfo['device']))
+                cmd += ' --members %s' %(" ".join(bondinfo[host_str]['member']))
+                if bondinfo[host_str].has_key('mode'):
+                    cmd += ' --mode %s' %bondinfo[host_str]['mode']
+                else:
+                    print 'Using Default mode for bonding interfaces'
+            with settings(host_string=host_str):
+                with cd(INSTALLER_DIR):
+                    run(cmd)
+#end: setup_interface
+
 
 @task
 def create_bond(tgt_host=None,bond_ip=None):
@@ -1069,25 +1049,38 @@ def prov_vmware_compute_vm():
 #end prov_compute_vm
 
 @task
-def add_static_route():
+@EXECUTE_TASK
+def add_static_route(*hosts):
     '''
     Add static route in the node based on parameter provided in the testbed file
     Sample configuration for testbed file
     static_route  = {
-    host1 : [{ 'ip': '3.3.3.0', 'netmask' : '255.255.255.0', 'gw':'192.168.20.254', 'intf': 'p0p25p0' },
-             { 'ip': '5.5.5.0', 'netmask' : '255.255.255.0', 'gw':'192.168.20.254', 'intf': 'p0p25p0' }],
-    host3 : [{ 'ip': '4.4.4.0', 'netmask' : '255.255.255.0', 'gw':'192.168.20.254', 'intf': 'p6p0p1' }],
+        host1 : [{ 'ip': '3.3.3.0', 'netmask' : '255.255.255.0', 'gw':'192.168.20.254', 'intf': 'p0p25p0' },
+                 { 'ip': '5.5.5.0', 'netmask' : '255.255.255.0', 'gw':'192.168.20.254', 'intf': 'p0p25p0' }],
+        host3 : [{ 'ip': '4.4.4.0', 'netmask' : '255.255.255.0', 'gw':'192.168.20.254', 'intf': 'p6p0p1' }],
     }
     '''
-    route_info = getattr(testbed, 'static_route', None)
-    if route_info:
-        tgt_host_list=route_info.keys()
-        for tgt_host in tgt_host_list:
-            for index in range(len(route_info[tgt_host])):
-                ip = route_info[tgt_host][index]['ip']
-                gw = route_info[tgt_host][index]['gw']
-                netmask = route_info[tgt_host][index]['netmask']
-                intf = route_info[tgt_host][index]['intf']
-                configure_static_route(tgt_host,ip,netmask,gw,intf)
-            restart_network_service(tgt_host)
 
+    # Skip if no static route is defined
+    route_info = getattr(testbed, 'static_route', None)
+    if route_info is None:
+        print 'WARNING: No Static routes defined in testbed. Skipping...'
+        return
+
+    # Override with cli input
+    if len(hosts) != 0:
+        route_info = dict([(key, route_info[key]) for key in filter(route_info.has_key, hosts)])
+
+    # Call provisioning script
+    for tgt_host in route_info.keys():
+        print 'Configuring Static Routes for Host (%s)' %tgt_host
+        for routedict in route_info[tgt_host]:
+            cmd = 'python setup-vnc-static-routes.py \
+                   --device {intf}\
+                   --network {ip}\
+                   --netmask {netmask}\
+                   --gw {gw}'.format(**routedict)
+            with settings(host_string=tgt_host):
+                with cd(INSTALLER_DIR):
+                    run(cmd)
+#end: add_static_route
