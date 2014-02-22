@@ -957,8 +957,6 @@ def setup_interface(*iftypes):
     if len(iftypes) == 0:
         iftypes = ('control', 'data')
 
-    # Create command and execute at node
-    cmd = 'python setup-vnc-interfaces.py'
     bondinfo = getattr(testbed, 'bond', None)
     for iftype in iftypes:
         # Skip if iftype is not defined in testbed
@@ -969,6 +967,8 @@ def setup_interface(*iftypes):
 
         for host_str in hosts.keys():
             hostinfo = hosts[host_str]
+            # Create command and execute at node
+            cmd = 'python setup-vnc-interfaces.py'
             cmd += ' --device {device} --ip {ip}'.format(**hostinfo)
             errmsg = 'For Type ({TYPE}), Host ({HOST}) is defined with device ({DEVICE}) but\
                       its bond info is not available'
