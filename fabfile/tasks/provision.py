@@ -844,7 +844,7 @@ def setup_st():
 def prov_encap_type():
     cfgm_ip = hstr_to_ip(get_control_host_string(env.roledefs['cfgm'][0]))
     ks_admin_user, ks_admin_password = get_openstack_credentials()
-    if 'encap_priority' not in env.keys(): env.encap_priority="MPLSoUDP,MPLSoGRE,VXLAN"
+    if 'encap_priority' not in env.keys(): env.encap_priority="MPLSoGRE,MPLSoUDP,VXLAN"
     encap_args = "--admin_user %s\
      --admin_password %s\
      --encap_priority %s \
