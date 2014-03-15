@@ -768,6 +768,15 @@ def setup_vrouter_node(*args):
             openstack_admin_password = 'contrail123'
 
         with  settings(host_string=host_string):
+
+            vmware = False
+            compute_vm_info = getattr(testbed, 'compute_vm', None)
+            if compute_vm_info:
+                hosts = compute_vm_info.keys()
+                if host_string in hosts:
+                    vmware = True
+                    vmware_info = compute_vm_info[host_string]
+
             if detect_ostype() == 'Ubuntu':
                 with settings(warn_only=True):
                     run('rm /etc/init/supervisor-vrouter.override')
@@ -776,8 +785,10 @@ def setup_vrouter_node(*args):
                          %(cfgm_host_password, openstack_admin_password, compute_control_ip, cfgm_ip, openstack_ip, openstack_mgmt_ip, ncontrols, get_service_token(), haproxy)
                 if tgt_ip != compute_mgmt_ip: 
                     cmd = cmd + " --non_mgmt_ip %s --non_mgmt_gw %s" %( tgt_ip, tgt_gw )
-                if set_vgw:   
+                if set_vgw:
                     cmd = cmd + " --public_subnet %s --public_vn_name %s" %(public_subnet,public_vn_name)
+                if vmware:
+                    cmd = cmd + " --vmware %s --vmware_username %s --vmware_passwd %s" % (vmware_info['esxi']['ip'], vmware_info['esxi']['username'], vmware_info['esxi']['password'])
                 print cmd
                 run(cmd)
 #end setup_vrouter
