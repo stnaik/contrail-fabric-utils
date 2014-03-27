@@ -795,6 +795,16 @@ def setup_vrouter_node(*args):
             openstack_admin_password = 'contrail123'
 
         with  settings(host_string=host_string):
+
+            vmware = False
+            compute_vm_info = getattr(testbed, 'compute_vm', None)
+            if compute_vm_info:
+                hosts = compute_vm_info.keys()
+                if host_string in hosts:
+                    vmware = True
+                    vmware_info = compute_vm_info[host_string]
+
+
             if detect_ostype() == 'Ubuntu':
                 with settings(warn_only=True):
                     run('rm /etc/init/supervisor-vrouter.override')
@@ -807,6 +817,9 @@ def setup_vrouter_node(*args):
                     cmd = cmd + " --public_subnet %s --public_vn_name %s --vgw_intf %s" %(public_subnet,public_vn_name,vgw_intf_list)
                     if gateway_routes != []:
                         cmd = cmd + " --gateway_routes %s" %(gateway_routes)
+                if vmware:
+                    cmd = cmd + " --vmware %s --vmware_username %s --vmware_passwd %s" % (vmware_info['esxi']['ip'], vmware_info['esxi']['username'], vmware_info['esxi']['password'])
+
                 print cmd
                 run(cmd)
 #end setup_vrouter
@@ -873,7 +886,7 @@ def setup_st():
 def prov_encap_type():
     cfgm_ip = hstr_to_ip(get_control_host_string(env.roledefs['cfgm'][0]))
     ks_admin_user, ks_admin_password = get_openstack_credentials()
-    if 'encap_priority' not in env.keys(): env.encap_priority="MPLSoUDP,MPLSoGRE,VXLAN"
+    if 'encap_priority' not in env.keys(): env.encap_priority="MPLSoGRE,MPLSoUDP,VXLAN"
     encap_args = "--admin_user %s\
      --admin_password %s\
      --encap_priority %s \
