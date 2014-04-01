@@ -818,7 +818,8 @@ def setup_vrouter_node(*args):
                     if gateway_routes != []:
                         cmd = cmd + " --gateway_routes %s" %(gateway_routes)
                 if vmware:
-                    cmd = cmd + " --vmware %s --vmware_username %s --vmware_passwd %s" % (vmware_info['esxi']['ip'], vmware_info['esxi']['username'], vmware_info['esxi']['password'])
+                    cmd = cmd + " --vmware %s --vmware_username %s --vmware_passwd %s --vmware_vmpg_vswitch %s" % (vmware_info['esxi']['ip'], vmware_info['esxi']['username'], \
+                                vmware_info['esxi']['password'], vmware_info['vswitch'])
 
                 print cmd
                 run(cmd)
